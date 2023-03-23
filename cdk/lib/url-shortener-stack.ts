@@ -28,7 +28,7 @@ export class UrlShortenerStack extends Stack {
       functionName: "UrlShortenerFn",
       runtime: Runtime.NODEJS_18_X,
       handler: "urlShortenerHandler",
-      entry: join(__dirname, "/../../lambdas/url-shortener-handler.ts"),
+      entry: join(__dirname, "/../../src/lambdas/url-shortener-handler.ts"),
       bundling: {
         minify: true,
       },

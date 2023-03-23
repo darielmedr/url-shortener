@@ -1,5 +1,5 @@
 {
-  "app": "npx ts-node --prefer-ts-exts src/cdk/bin/url-shortener.ts",
+  "app": "npx ts-node --prefer-ts-exts cdk/bin/url-shortener.ts",
   "watch": {
     "include": ["**"],
     "exclude": [
