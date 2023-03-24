@@ -1,5 +1,5 @@
 import { RemovalPolicy, Stack, StackProps } from "aws-cdk-lib";
-import { LambdaIntegration, RestApi } from "aws-cdk-lib/aws-apigateway";
+import { LambdaRestApi } from "aws-cdk-lib/aws-apigateway";
 import { AttributeType, Table } from "aws-cdk-lib/aws-dynamodb";
 import { Runtime } from "aws-cdk-lib/aws-lambda";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
@@ -25,7 +25,7 @@ export class UrlShortenerStack extends Stack {
     });
 
     const handlerFn = new NodejsFunction(this, "UrlShortenerFn", {
-      functionName: "UrlShortenerFn",
+      functionName: "urlShortenerFn",
       runtime: Runtime.NODEJS_18_X,
       handler: "urlShortenerHandler",
       entry: join(__dirname, "/../../src/lambdas/url-shortener-handler.ts"),
@@ -37,14 +37,9 @@ export class UrlShortenerStack extends Stack {
       },
     });
 
-    const getFnIntegration = new LambdaIntegration(handlerFn);
-
-    const api = new RestApi(this, "UrlShortenerApi", {
-      restApiName: "Url Shortener",
-      description: "Url shortener",
+    const api = new LambdaRestApi(this, "UrlShortenerApi", {
+      handler: handlerFn,
     });
-
-    api.root.addMethod("GET", getFnIntegration);
 
     dbTable.grantReadWriteData(handlerFn);
   }

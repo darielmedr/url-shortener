@@ -1,5 +1,13 @@
-import { DynamoDB } from "@aws-sdk/client-dynamodb";
+import { AttributeMap, Converter } from "aws-sdk/clients/dynamodb";
+import {
+  APIGatewayProxyEventV2,
+  APIGatewayProxyResultV2,
+  Handler,
+} from "aws-lambda";
 import { randomUUID } from "crypto";
+import { DynamoDB } from "@aws-sdk/client-dynamodb";
+
+type ProxyHandler = Handler<APIGatewayProxyEventV2, APIGatewayProxyResultV2>;
 
 function getDbInstance() {
   const db = new DynamoDB({});
@@ -8,11 +16,29 @@ function getDbInstance() {
   return { db, tableName };
 }
 
-async function createShortUrl(event: any): Promise<unknown> {
-  const { db, tableName } = getDbInstance();
+function getRequestPath(requestContext: Record<string, string>): string {
+  const path = requestContext.path || "/";
+  const endsWithPathSeparator = path.endsWith("/");
 
+  return endsWithPathSeparator ? path : `${path}/`;
+}
+
+async function createShortUrl(
+  event: APIGatewayProxyEventV2
+): Promise<APIGatewayProxyResultV2> {
+  const { targetUrl } = event.queryStringParameters ?? {};
+
+  if (!targetUrl) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({
+        message: "Usage: ?targetUrl=<URL>",
+      }),
+    };
+  }
+
+  const { db, tableName } = getDbInstance();
   const id = randomUUID();
-  const { targetUrl } = event.queryStringParameters;
 
   await db.putItem({
     TableName: tableName,
@@ -22,21 +48,36 @@ async function createShortUrl(event: any): Promise<unknown> {
     },
   });
 
-  const { domainName, path } = event.requestContext;
+  const { domainName } = event.requestContext;
+  const path = getRequestPath(
+    event.requestContext as unknown as Record<string, string>
+  );
   const url = `https://${domainName}${path}${id}`;
 
   return {
     statusCode: 200,
     body: JSON.stringify({
+      url,
       message: `URL created: ${url}`,
     }),
   };
 }
 
-async function readShortUrl(event: any): Promise<unknown> {
+async function readShortUrl(
+  event: APIGatewayProxyEventV2
+): Promise<APIGatewayProxyResultV2> {
   const { db, tableName } = getDbInstance();
 
-  const { id } = event.pathParameters?.proxy;
+  const id = event.pathParameters?.proxy;
+
+  if (!id) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({
+        message: "Invalid request",
+      }),
+    };
+  }
 
   const item = await db.getItem({
     TableName: tableName,
@@ -57,38 +98,37 @@ async function readShortUrl(event: any): Promise<unknown> {
     };
   }
 
+  const attributeMap: AttributeMap = {
+    targetUrl,
+  };
+
   return {
     statusCode: 301, // Redirect
     headers: {
-      Location: targetUrl,
+      Location: Converter.unmarshall(attributeMap).targetUrl,
     },
   };
 }
 
-export async function urlShortenerHandler(event: any): Promise<unknown> {
-  const { queryParams } = event?.queryStringParameters ?? {};
+export const urlShortenerHandler: ProxyHandler = async (
+  event
+): Promise<APIGatewayProxyResultV2> => {
+  const { targetUrl } = event.queryStringParameters ?? {};
 
-  return {
-    statusCode: 200,
-    body: JSON.stringify({
-      message: "Usage: ?targetUrl=<URL>",
-    }),
-  };
-
-  if (queryParams?.targetUrl) {
+  if (targetUrl) {
     return createShortUrl(event);
   }
 
-  const { pathParams } = event.pathParameters;
+  const { proxy } = event.pathParameters ?? {};
 
-  if (pathParams?.proxy) {
+  if (proxy) {
     return readShortUrl(event);
   }
 
   return {
-    statusCode: 200,
+    statusCode: 400,
     body: JSON.stringify({
       message: "Usage: ?targetUrl=<URL>",
     }),
   };
-}
+};
